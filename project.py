@@ -1,0 +1,353 @@
+from PyQt5.QtCore import QLocale
+from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QDoubleValidator
+from PyQt5.QtGui import QMouseEvent
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QStandardItem
+from PyQt5.QtGui import QStandardItemModel
+from PyQt5.QtGui import QWheelEvent
+from PyQt5.QtWidgets import QComboBox
+from PyQt5.QtWidgets import QLabel
+from PyQt5.QtWidgets import QLineEdit
+from PyQt5.QtWidgets import QWidget, QApplication
+from PyQt5.QtGui import QPainter, QPen
+from PyQt5.QtCore import Qt, QPoint, QPointF
+import sys
+
+WIDTH = 1000
+HEIGHT = 800
+
+
+def first_func(x, a, b, c):
+    den = ((b + x) * (c - x) ** 2)
+    if den == 0:
+        return 999999
+    return (a * x) / den
+
+TASKS = {
+    0: (first_func, 3)
+}
+
+
+class Example(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setMouseTracking(True)
+        self.axis_pen = QPen(Qt.green)
+        self.func_pen = QPen(Qt.red)
+        self.axis_pen.setWidth(3)
+        self.func_pen.setWidth(3)
+        self.coords_pen = QPen(Qt.green)
+        self.padding = 0
+        self.panelWidth = 200
+        self.tracking = False
+        self.last_coords = QPoint(0, 0)
+        self.initVars()
+        self.initUI()
+
+    def initVars(self):
+        self.a = 1
+        self.b = 1
+        self.c = 1
+        k = 5
+        self.t_left_top = QPointF(-k, -k)
+        self.t_right_bottom = QPointF(k, k)
+        self.steps_count = 500
+        self.alpha = self.t_left_top.x()
+        self.beta = self.t_right_bottom.x()
+        self.task_number = 1
+
+    def initUI(self):
+        self.setGeometry(800 - WIDTH // 2, 450 - HEIGHT // 2, WIDTH, HEIGHT)
+        p = self.palette()
+        p.setColor(self.backgroundRole(), QColor(40, 40, 40))
+        self.setPalette(p)
+        validator = QDoubleValidator()
+        validator.setLocale(QLocale("Russia"))
+        self.parameters = [QLineEdit(self) for _ in range(3)]
+        offset = 120
+        for i in range(len(self.parameters)):
+            self.parameters[i].setGeometry(80, offset + 40 * i, 100, 30)
+            self.parameters[i].setValidator(validator)
+            self.parameters[i].setText("1")
+            label = QLabel(self)
+            label.setText("{} = ".format(chr(i + ord('a'))))
+            label.setGeometry(50, offset + 40 * i, 70, 30)
+            label.setStyleSheet("color: white")
+        self.parameters[0].textChanged.connect(self.update_a_field)
+        self.parameters[1].textChanged.connect(self.update_b_field)
+        self.parameters[2].textChanged.connect(self.update_c_field)
+
+        label = QLabel(self)
+        label.setGeometry(65, 450, 60, 30)
+        label.setText("alpha = ")
+        label.setStyleSheet('color: white')
+        self.alpha_field = QLineEdit(self)
+        self.alpha_field.setGeometry(120, 450, 60, 30)
+        self.alpha_field.setValidator(validator)
+        self.alpha_field.setText(str(self.alpha))
+        self.alpha_field.textChanged.connect(self.update_alpha_field)
+
+        label = QLabel(self)
+        label.setGeometry(65, 500, 60, 30)
+        label.setText("beta = ")
+        label.setStyleSheet('color: white')
+        self.beta_field = QLineEdit(self)
+        self.beta_field.setGeometry(120, 500, 60, 30)
+        self.beta_field.setValidator(validator)
+        self.beta_field.setText(str(self.beta))
+        self.beta_field.textChanged.connect(self.update_beta_field)
+        combo = QComboBox(self)
+        combo.addItems(["Task {}".format(i) for i in range(1, 2)])
+        combo.move(60, 15)
+        combo.activated[str].connect(self.onSelect)
+
+        self.label = QLabel(self)
+        pixmap = QPixmap('formula{}.png'.format(self.task_number))
+        self.label.setPixmap(pixmap)
+        self.label.move((self.panelWidth - pixmap.width()) / 2, 50)
+
+        label = QLabel(self)
+        label.setGeometry(40, 275, 60, 30)
+        label.setText("left")
+        label.setStyleSheet('color: white')
+        self.left_x_text_field = QLineEdit(self)
+        self.left_x_text_field.setGeometry(40, 300, 60, 30)
+        self.left_x_text_field.setText(str(self.t_left_top.x()))
+        self.left_x_text_field.setValidator(validator)
+        self.left_x_text_field.textChanged.connect(self.update_left_x_field)
+
+        label = QLabel(self)
+        label.setGeometry(120, 275, 60, 30)
+        label.setText("top")
+        label.setStyleSheet('color: white')
+        self.left_y_text_field = QLineEdit(self)
+        self.left_y_text_field.setGeometry(120, 380, 60, 30)
+        self.left_y_text_field.setText(str(self.t_left_top.y()))
+        self.left_y_text_field.setValidator(validator)
+        self.left_y_text_field.textChanged.connect(self.update_left_y_field)
+
+        label = QLabel(self)
+        label.setGeometry(40, 355, 60, 30)
+        label.setText("right")
+        label.setStyleSheet('color: white')
+        self.right_x_text_field = QLineEdit(self)
+        self.right_x_text_field.setGeometry(40, 380, 60, 30)
+        self.right_x_text_field.setText(str(self.t_right_bottom.x()))
+        self.right_x_text_field.setValidator(validator)
+        self.right_x_text_field.textChanged.connect(self.update_right_x_field)
+
+        label = QLabel(self)
+        label.setGeometry(120, 355, 60, 30)
+        label.setText("bottom")
+        label.setStyleSheet('color: white')
+        self.right_y_text_field = QLineEdit(self)
+        self.right_y_text_field.setGeometry(120, 300, 60, 30)
+        self.right_y_text_field.setText(str(self.t_right_bottom.y()))
+        self.right_y_text_field.setValidator(validator)
+        self.right_y_text_field.textChanged.connect(self.update_right_y_field)
+
+        self.setWindowTitle('Points')
+        self.show()
+
+    def onSelect(self, text):
+        self.task_number = int(text[-1])
+        pixmap = QPixmap('formula{}.png'.format(self.task_number))
+        self.label.setPixmap(pixmap)
+        self.label.move((self.panelWidth - pixmap.width()) / 2, 50)
+
+        self.update()
+
+    def update_left_x_field(self):
+        try:
+            self.t_left_top.setX(float(self.left_x_text_field.text()))
+            self.update()
+        except ValueError:
+            pass
+
+    def update_left_y_field(self):
+        try:
+            self.t_left_top.setY(float(self.left_y_text_field.text()))
+            self.update()
+        except ValueError:
+            pass
+
+    def update_right_x_field(self):
+        try:
+            self.t_right_bottom.setX(float(self.right_x_text_field.text()))
+            self.update()
+        except ValueError:
+            pass
+
+    def update_right_y_field(self):
+        try:
+            self.t_right_bottom.setY(float(self.right_y_text_field.text()))
+            self.update()
+        except ValueError:
+            pass
+
+    def update_a_field(self):
+        try:
+            self.a = float(self.parameters[0].text())
+            self.update()
+        except ValueError:
+            pass
+
+    def update_b_field(self):
+        try:
+            self.b = float(self.parameters[0].text())
+            self.update()
+        except ValueError:
+            pass
+
+    def update_c_field(self):
+        try:
+            self.c = float(self.parameters[0].text())
+            self.update()
+        except ValueError:
+            pass
+
+    def update_alpha_field(self):
+        try:
+            self.alpha = float(self.alpha_field.text())
+            self.update()
+        except ValueError:
+            pass
+
+    def update_beta_field(self):
+        try:
+            self.beta = float(self.beta_field.text())
+            self.update()
+        except ValueError:
+            pass
+
+    def wheelEvent(self, event: QWheelEvent):
+        delta = event.angleDelta().y() / 400
+
+        self.t_left_top.setX(self.t_left_top.x() + delta)
+        self.t_right_bottom.setX(self.t_right_bottom.x() - delta)
+        self.t_left_top.setY(self.t_left_top.y() + delta)
+        self.t_right_bottom.setY(self.t_right_bottom.y() - delta)
+
+        self.left_x_text_field.setText(str(round(self.t_left_top.x(), 2)))
+        self.right_x_text_field.setText(str(round(self.t_right_bottom.x(), 2)))
+
+        self.left_y_text_field.setText(str(round(self.t_left_top.y(), 2)))
+        self.right_y_text_field.setText(str(round(self.t_right_bottom.y(), 2)))
+
+        self.update()
+
+    def mouseMoveEvent(self, event: QMouseEvent):
+        if not self.tracking:
+            return
+        delta = event.pos() - self.last_coords
+        t_delta = QPointF(delta.x() / self.get_x_scale(),
+                          delta.y() / self.get_y_scale())
+        t_delta = QPointF(-t_delta.x(), t_delta.y())
+        self.t_left_top += t_delta
+        self.t_right_bottom += t_delta
+        self.left_x_text_field.setText(str(round(self.t_left_top.x(), 2)))
+        self.right_x_text_field.setText(str(round(self.t_right_bottom.x(), 2)))
+
+        self.left_y_text_field.setText(str(round(self.t_left_top.y(), 2)))
+        self.right_y_text_field.setText(str(round(self.t_right_bottom.y(), 2)))
+        self.last_coords = event.pos()
+        self.update()
+
+    def mousePressEvent(self, event: QMouseEvent):
+        self.tracking = True
+        self.last_coords = event.pos()
+
+    def mouseReleaseEvent(self, event: QMouseEvent):
+        self.tracking = False
+
+    def leftTop(self):
+        return QPointF(self.panelWidth, self.padding)
+
+    def rightBottom(self):
+        return QPointF(self.width() - self.padding, self.height() - self.padding)
+
+    def real_width(self):
+        return self.rightBottom().x() - self.leftTop().x()
+
+    def real_height(self):
+        return self.rightBottom().y() - self.leftTop().y()
+
+    def t_width(self):
+        return self.t_right_bottom.x() - self.t_left_top.x()
+
+    def t_height(self):
+        return self.t_right_bottom.y() - self.t_left_top.y()
+
+    def get_x_scale(self):
+        return self.real_width() / self.t_width()
+
+    def get_y_scale(self):
+        return self.real_height() / self.t_height()
+
+    def get_real_coord(self, t_coords):
+        relative_t_coords = t_coords - self.t_left_top
+        relative_real_coords = QPointF(relative_t_coords.x() * self.get_x_scale(),
+                                       self.real_height() - relative_t_coords.y() * self.get_y_scale())
+        return relative_real_coords + self.leftTop()
+
+    def paintEvent(self, _):
+        try:
+            self.b = int(self.parameters[1].text())
+        except ValueError:
+            pass
+        try:
+            self.c = int(self.parameters[2].text())
+        except ValueError:
+            pass
+
+        qp = QPainter()
+        qp.begin(self)
+        qp.setPen(Qt.black)
+        qp.setBrush(Qt.black)
+        qp.drawRect(self.leftTop().x(), self.leftTop().y(), self.real_width(), self.real_height())
+        self.draw_net(qp)
+
+        self.draw_func(qp, self.a, self.b, self.c)
+        qp.end()
+
+    def draw_net(self, qp):
+        qp.setPen(self.axis_pen)
+        p0 = self.get_real_coord(QPointF(self.t_left_top.x(), 0))
+        p1 = self.get_real_coord(QPointF(self.t_right_bottom.x(), 0))
+        p2 = self.get_real_coord(QPointF(0, self.t_left_top.y()))
+        p3 = self.get_real_coord(QPointF(0, self.t_right_bottom.y()))
+        if self.t_left_top.y() < 0:
+            qp.drawLine(p0, p1)
+        if self.t_left_top.x() < 0:
+            qp.drawLine(p2, p3)
+        qp.setPen(self.coords_pen)
+        for i in range(int(self.t_left_top.x()), int(self.t_right_bottom.x() + 1)):
+            p1 = self.get_real_coord(QPointF(i, self.t_right_bottom.y()))
+            p0 = self.get_real_coord(QPointF(i, self.t_left_top.y()))
+            if p0.x() > self.leftTop().x():
+                qp.drawLine(p0, p1)
+        for i in range(int(self.t_left_top.y()), int(self.t_right_bottom.y() + 1)):
+            p1 = self.get_real_coord(QPointF(self.t_right_bottom.x(), i))
+            p0 = self.get_real_coord(QPointF(self.t_left_top.x(), i))
+            qp.drawLine(p0, p1)
+
+    def draw_func(self, qp, *params):
+        qp.setPen(self.func_pen)
+        # step_size = (self.t_right_bottom.x() - self.t_left_top.x()) / (self.steps_count - 1)
+        step_size = (self.beta - self.alpha) / (self.steps_count - 1)
+        t_x_0 = self.t_left_top.x()
+        t_y_0 = first_func(t_x_0, *params)
+        prev_point = self.get_real_coord(QPointF(t_x_0, t_y_0))
+        for i in range(1, self.steps_count):
+            t_x = i * step_size + self.t_left_top.x()
+            t_y = first_func(t_x, *params)
+            current_point = self.get_real_coord(QPointF(t_x, t_y))
+            if abs(current_point.y() - prev_point.y()) < self.real_height() * 2:
+                qp.drawLine(prev_point, current_point)
+            prev_point = current_point
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = Example()
+    sys.exit(app.exec_())
