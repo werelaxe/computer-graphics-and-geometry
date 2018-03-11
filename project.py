@@ -1,10 +1,10 @@
 from PyQt5.QtCore import QLocale
+from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimerEvent
 from PyQt5.QtGui import QColor
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtGui import QStandardItem
-from PyQt5.QtGui import QStandardItemModel
 from PyQt5.QtGui import QWheelEvent
 from PyQt5.QtWidgets import QComboBox
 from PyQt5.QtWidgets import QLabel
@@ -12,10 +12,27 @@ from PyQt5.QtWidgets import QLineEdit
 from PyQt5.QtWidgets import QWidget, QApplication
 from PyQt5.QtGui import QPainter, QPen
 from PyQt5.QtCore import Qt, QPoint, QPointF
+import numpy as np
+from math import cos, pi
 import sys
+
 
 WIDTH = 1000
 HEIGHT = 800
+
+
+def cart2pol(cart_point: QPointF):
+    x, y = cart_point.x(), cart_point.y()
+    r = np.sqrt(x ** 2 + y ** 2)
+    phi = np.arctan2(y, x)
+    return QPointF(r, phi)
+
+
+def pol2cart(polar_point: QPointF):
+    r, phi = polar_point.x(), polar_point.y()
+    x = r * np.cos(phi)
+    y = r * np.sin(phi)
+    return QPointF(x, y)
 
 
 def first_func(x, a, b, c):
@@ -24,9 +41,10 @@ def first_func(x, a, b, c):
         return 999999
     return (a * x) / den
 
-TASKS = {
-    0: (first_func, 3)
-}
+
+def second_func(phi, a, b, _):
+    return a + b * cos(phi)
+    # return phi
 
 
 class Example(QWidget):
@@ -45,6 +63,9 @@ class Example(QWidget):
         self.initVars()
         self.initUI()
 
+    def get_current_task(self):
+        return self.TASKS[self.task_number - 1]
+
     def initVars(self):
         self.a = 1
         self.b = 1
@@ -56,6 +77,10 @@ class Example(QWidget):
         self.alpha = self.t_left_top.x()
         self.beta = self.t_right_bottom.x()
         self.task_number = 1
+        self.TASKS = {
+            0: self.draw_first_func,
+            1: self.draw_second_func,
+        }
 
     def initUI(self):
         self.setGeometry(800 - WIDTH // 2, 450 - HEIGHT // 2, WIDTH, HEIGHT)
@@ -98,7 +123,7 @@ class Example(QWidget):
         self.beta_field.setText(str(self.beta))
         self.beta_field.textChanged.connect(self.update_beta_field)
         combo = QComboBox(self)
-        combo.addItems(["Task {}".format(i) for i in range(1, 2)])
+        combo.addItems(["Task {}".format(i) for i in range(1, 3)])
         combo.move(60, 15)
         combo.activated[str].connect(self.onSelect)
 
@@ -106,6 +131,8 @@ class Example(QWidget):
         pixmap = QPixmap('formula{}.png'.format(self.task_number))
         self.label.setPixmap(pixmap)
         self.label.move((self.panelWidth - pixmap.width()) / 2, 50)
+        # self.label.move(0, 100)
+        self.label.setGeometry((self.panelWidth - pixmap.width()) / 2, 50, pixmap.width() + 100, pixmap.height())
 
         label = QLabel(self)
         label.setGeometry(40, 275, 60, 30)
@@ -155,7 +182,6 @@ class Example(QWidget):
         pixmap = QPixmap('formula{}.png'.format(self.task_number))
         self.label.setPixmap(pixmap)
         self.label.move((self.panelWidth - pixmap.width()) / 2, 50)
-
         self.update()
 
     def update_left_x_field(self):
@@ -293,11 +319,11 @@ class Example(QWidget):
 
     def paintEvent(self, _):
         try:
-            self.b = int(self.parameters[1].text())
+            self.b = float(self.parameters[1].text())
         except ValueError:
             pass
         try:
-            self.c = int(self.parameters[2].text())
+            self.c = float(self.parameters[2].text())
         except ValueError:
             pass
 
@@ -307,8 +333,8 @@ class Example(QWidget):
         qp.setBrush(Qt.black)
         qp.drawRect(self.leftTop().x(), self.leftTop().y(), self.real_width(), self.real_height())
         self.draw_net(qp)
-
-        self.draw_func(qp, self.a, self.b, self.c)
+        qp.setPen(self.func_pen)
+        self.get_current_task()(qp, self.a, self.b, self.c)
         qp.end()
 
     def draw_net(self, qp):
@@ -332,20 +358,35 @@ class Example(QWidget):
             p0 = self.get_real_coord(QPointF(self.t_left_top.x(), i))
             qp.drawLine(p0, p1)
 
-    def draw_func(self, qp, *params):
-        qp.setPen(self.func_pen)
+    def draw_first_func(self, qp, *params):
         # step_size = (self.t_right_bottom.x() - self.t_left_top.x()) / (self.steps_count - 1)
         step_size = (self.beta - self.alpha) / (self.steps_count - 1)
         t_x_0 = self.t_left_top.x()
         t_y_0 = first_func(t_x_0, *params)
-        prev_point = self.get_real_coord(QPointF(t_x_0, t_y_0))
+        start_point = QPointF(t_x_0, t_y_0)
+        prev_point = self.get_real_coord(start_point)
         for i in range(1, self.steps_count):
             t_x = i * step_size + self.t_left_top.x()
             t_y = first_func(t_x, *params)
-            current_point = self.get_real_coord(QPointF(t_x, t_y))
+            c_point = QPointF(t_x, t_y)
+            current_point = self.get_real_coord(c_point)
             if abs(current_point.y() - prev_point.y()) < self.real_height() * 2:
                 qp.drawLine(prev_point, current_point)
             prev_point = current_point
+
+    def draw_second_func(self, qp, *params):
+        prev_point = pol2cart(QPointF(second_func(0, *params), 0))
+        step_size = (self.beta - self.alpha) / (self.steps_count - 1)
+        for i in range(1, self.steps_count):
+            phi = i * step_size
+            r = second_func(phi, *params)
+            new_point = pol2cart(QPointF(r, phi))
+            qp.drawLine(
+                self.get_real_coord(prev_point),
+                self.get_real_coord(new_point),
+            )
+            prev_point = new_point
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
