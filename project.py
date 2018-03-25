@@ -54,7 +54,7 @@ class Example(QWidget):
         self.axis_pen = QPen(Qt.green)
         self.func_pen = QPen(Qt.red)
         self.axis_pen.setWidth(3)
-        self.func_pen.setWidth(3)
+        self.func_pen.setWidth(1)
         self.coords_pen = QPen(Qt.green)
         self.padding = 0
         self.panelWidth = 200
@@ -80,6 +80,7 @@ class Example(QWidget):
         self.TASKS = {
             0: self.draw_first_func,
             1: self.draw_second_func,
+            2: self.draw_ellipse,
         }
 
     def initUI(self):
@@ -123,7 +124,7 @@ class Example(QWidget):
         self.beta_field.setText(str(self.beta))
         self.beta_field.textChanged.connect(self.update_beta_field)
         combo = QComboBox(self)
-        combo.addItems(["Task {}".format(i) for i in range(1, 3)])
+        combo.addItems(["Task {}".format(i) for i in range(1, 4)])
         combo.move(60, 15)
         combo.activated[str].connect(self.onSelect)
 
@@ -387,6 +388,45 @@ class Example(QWidget):
             )
             prev_point = new_point
 
+    def draw_ellipse(self, qp: QPainter, *params):
+        a = self.a
+        b = self.b
+        x0 = int(self.leftTop().x() + (self.width() - self.leftTop().x()) // 2)
+        y0 = self.height() // 2
+        r = self.c * self.get_x_scale()
+        x = x0 - r
+        y = y0
+        counter = 0
+        pixel_size = 10
+        while x < x0:
+            qp.drawRect(x - pixel_size // 2, y - pixel_size // 2, pixel_size, pixel_size)
+            qp.drawRect(2 * x0 - x - pixel_size // 2, 2 * y0 - y - pixel_size // 2, pixel_size, pixel_size)
+            qp.drawRect(x - pixel_size // 2, 2 * y0 - y - pixel_size // 2, pixel_size, pixel_size)
+            qp.drawRect(2 * x0 - x - pixel_size // 2, y - pixel_size // 2, pixel_size, pixel_size)
+            xs = [0, 1]
+            ys = [0, -1]
+            min_point = 0, 0
+            min_len = 9999999
+            for dx in xs:
+                for dy in ys:
+                    if not dx and not dy:
+                        continue
+                    new_x = x + dx * pixel_size
+                    new_y = y + dy * pixel_size
+                    ln = abs((new_x - x0) ** 2 * a + (new_y - y0) ** 2 * b - r ** 2)
+                    if ln < min_len:
+                        min_len = ln
+                        min_point = new_x, new_y
+            x, y = min_point
+            x, y = int(x), int(y)
+            qp.drawRect(x - pixel_size // 2, y - pixel_size // 2, pixel_size, pixel_size)
+            qp.drawRect(2 * x0 - x - pixel_size // 2, 2 * y0 - y - pixel_size // 2, pixel_size, pixel_size)
+            qp.drawRect(x - pixel_size // 2, 2 * y0 - y - pixel_size // 2, pixel_size, pixel_size)
+            qp.drawRect(2 * x0 - x - pixel_size // 2, y - pixel_size // 2, pixel_size, pixel_size)
+            # qp.drawPoint(2 * x0 - x, 2 * y0 - y)
+            # qp.drawPoint(x, 2 * y0 - y)
+            # qp.drawPoint(2 * x0 - x, y)
+            counter += 1
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
