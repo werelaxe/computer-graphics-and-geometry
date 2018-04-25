@@ -437,15 +437,16 @@ class Example(QWidget):
     def draw_polygons_residual(self, qp: QPainter, *params):
         p1 = Polygon([-4, -3, -2, -1, -4, 2, -2, 4, 1, 3, 4, 2, 3, -1, 1, -3])
         p2 = Polygon([-2, -4, -3, 0, 0, 4, 2, 1, 3, -4])
-        # print(p1 - p2)
-        self.draw_polygon(qp, p1)
+        if self.a == 1:
+            self.draw_polygon(qp, p1)
 
-        blue_pen = QPen(Qt.blue)
-        blue_pen.setWidth(3)
-        qp.setPen(blue_pen)
-        self.draw_polygon(qp, p2)
+        if self.b == 1:
+            blue_pen = QPen(Qt.blue)
+            blue_pen.setWidth(3)
+            qp.setPen(blue_pen)
+            self.draw_polygon(qp, p2)
 
-        if self.a != 1:
+        if self.c != 1:
             yellow_pen = QPen(Qt.yellow)
             yellow_pen.setWidth(3)
             qp.setPen(yellow_pen)
