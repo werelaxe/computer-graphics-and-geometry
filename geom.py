@@ -1,6 +1,14 @@
+from copy import copy
 from math import sqrt
 
 EPS = 0.00001
+
+
+class PointsDict(dict):
+    def __getitem__(self, item):
+        for k, v in self.items():
+            if abs(k.x - item.x) < EPS and abs(k.y - item.y) < EPS:
+                return v
 
 
 class Point:
@@ -20,6 +28,10 @@ class Point:
 
     def __repr__(self):
         return "Point({}, {})".format(self.x, self.y)
+
+    @property
+    def coords(self):
+        return self.x, self.y
 
     def dto(self, p):
         return sqrt((p.x - self.x) ** 2 + (p.y - self.y) ** 2)
@@ -57,26 +69,19 @@ class Segment:
         ]
 
     def intersects(self, other):
-        # print("intersection: {} and {}".format(self, other))
         if abs(self.a * other.b - other.a * self.b) < EPS:
-            # print("result: None, div by zero")
             return None
         if self.a == 1:
-            # print("case A == 1")
             y = (other.a * self.c - other.c) / (other.b - other.a * self.b)
             x = -self.b * y - self.c
         elif self.b == 1:
-            # print("case B == 1")
             x = (other.b * self.c - other.c) / (other.a - self.a * other.b)
             y = -self.a * x - self.c
         else:
             raise ValueError
-        # print("suggested int point: {} {}".format(x, y))
-        # print("flags: ", flag0, flag1, flag2, flag3)
         suggested_point = Point(x, y)
         if suggested_point in self and suggested_point in other:
             return suggested_point
-        # print("result: None, no intersection")
 
     def __contains__(self, point):
         if abs(self.a * point.x + self.b * point.y + self.c) > EPS:
@@ -102,12 +107,17 @@ class Polygon:
         else:
             raise ValueError
         self.segments = self.get_segments()
-        self.get_index_by_segment = dict([(self.segments[i], i) for i in range(len(self.segments))])
-        self.get_index_by_point = dict([(self.points[i], i) for i in range(len(self.points))])
+        self.get_index_by_segment = PointsDict([(self.segments[i], i) for i in range(len(self.segments))])
+        self.get_index_by_point = PointsDict([(self.points[i], i) for i in range(len(self.points))])
+        self._pure_points = copy(self.points)
         self.epoints = []
 
     def __repr__(self):
         return "Polygon({})".format(", ".join(str(p) for p in self.points))
+
+    @property
+    def pure_points(self):
+        return self._pure_points
 
     def extend_points(self, other):
         for seg in self.segments:
@@ -116,8 +126,8 @@ class Polygon:
             self.epoints.extend(int_points)
         self.segments = self.get_segments()
         self.points = self.epoints
-        self.get_index_by_segment = dict([(self.segments[i], i) for i in range(len(self.segments))])
-        self.get_index_by_point = dict([(self.points[i], i) for i in range(len(self.points))])
+        self.get_index_by_segment = PointsDict([(self.segments[i], i) for i in range(len(self.segments))])
+        self.get_index_by_point = PointsDict([(self.points[i], i) for i in range(len(self.points))])
 
     def intersects_with(self, segment: Segment):
         int_points = []
@@ -148,28 +158,24 @@ class Polygon:
                 return point
 
     def _find_chain(self, start_point, other, result, used):
-        print("start point:", start_point)
         i = self.get_index_by_point[start_point]
         while self.epoints[i] not in other:
-            print("outer point:", self.epoints[i])
             if self.epoints[i] in used:
                 return None
             result[-1].append(self.epoints[i])
             used.add(self.epoints[i])
             i = (i + 1) % len(self.epoints)
-        print("intersection point:", self.epoints[i])
         result[-1].append(self.epoints[i])
         used.add(self.epoints[i])
         i = other.get_index_by_point[self.epoints[i]]
         i -= 1
         while other.epoints[i] in self:
-            print("inner point:", other.epoints[i])
             result[-1].append(other.epoints[i])
             # used.add(other.epoints[i])
             i -= 1
         used.add(other.epoints[i + 1])
         index = self.get_index_by_point[other.epoints[i + 1]]
-        return self.epoints[index + 1]
+        return self.epoints[(index + 1) % len(self.epoints)]
 
     def _find_cycle(self, other, used, result):
         result.append([])

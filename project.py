@@ -16,6 +16,7 @@ import numpy as np
 from math import cos, pi
 import sys
 
+from geom import Polygon
 
 WIDTH = 1000
 HEIGHT = 800
@@ -54,7 +55,7 @@ class Example(QWidget):
         self.axis_pen = QPen(Qt.green)
         self.func_pen = QPen(Qt.red)
         self.axis_pen.setWidth(3)
-        self.func_pen.setWidth(1)
+        self.func_pen.setWidth(3)
         self.coords_pen = QPen(Qt.green)
         self.padding = 0
         self.panelWidth = 200
@@ -81,6 +82,7 @@ class Example(QWidget):
             0: self.draw_first_func,
             1: self.draw_second_func,
             2: self.draw_ellipse,
+            3: self.draw_polygons_residual,
         }
 
     def initUI(self):
@@ -124,7 +126,7 @@ class Example(QWidget):
         self.beta_field.setText(str(self.beta))
         self.beta_field.textChanged.connect(self.update_beta_field)
         combo = QComboBox(self)
-        combo.addItems(["Task {}".format(i) for i in range(1, 4)])
+        combo.addItems(["Task {}".format(i) for i in range(1, len(self.TASKS) + 1)])
         combo.move(60, 15)
         combo.activated[str].connect(self.onSelect)
 
@@ -423,10 +425,32 @@ class Example(QWidget):
             qp.drawRect(2 * x0 - x - pixel_size // 2, 2 * y0 - y - pixel_size // 2, pixel_size, pixel_size)
             qp.drawRect(x - pixel_size // 2, 2 * y0 - y - pixel_size // 2, pixel_size, pixel_size)
             qp.drawRect(2 * x0 - x - pixel_size // 2, y - pixel_size // 2, pixel_size, pixel_size)
-            # qp.drawPoint(2 * x0 - x, 2 * y0 - y)
-            # qp.drawPoint(x, 2 * y0 - y)
-            # qp.drawPoint(2 * x0 - x, y)
             counter += 1
+
+    def draw_polygon(self, qp: QPainter, polygon: Polygon):
+        for i in range(-1, len(polygon.pure_points) - 1):
+            qp.drawLine(
+                self.get_real_coord(QPointF(*polygon.pure_points[i].coords)),
+                self.get_real_coord(QPointF(*polygon.pure_points[i + 1].coords))
+            )
+
+    def draw_polygons_residual(self, qp: QPainter, *params):
+        p1 = Polygon([-4, -3, -2, -1, -4, 2, -2, 4, 1, 3, 4, 2, 3, -1, 1, -3])
+        p2 = Polygon([-2, -4, -3, 0, 0, 4, 2, 1, 3, -4])
+        # print(p1 - p2)
+        self.draw_polygon(qp, p1)
+
+        blue_pen = QPen(Qt.blue)
+        blue_pen.setWidth(3)
+        qp.setPen(blue_pen)
+        self.draw_polygon(qp, p2)
+
+        if self.a != 1:
+            yellow_pen = QPen(Qt.yellow)
+            yellow_pen.setWidth(3)
+            qp.setPen(yellow_pen)
+            for p in p1 - p2:
+                self.draw_polygon(qp, p)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
