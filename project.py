@@ -88,7 +88,7 @@ class Example(QWidget):
         self.steps_count = 500
         self.alpha = self.t_left_top.x()
         self.beta = self.t_right_bottom.x()
-        self.task_number = 5
+        self.task_number = 1
         self.TASKS = {
             0: self.draw_first_func,
             1: self.draw_second_func,
@@ -345,12 +345,17 @@ class Example(QWidget):
 
         qp = QPainter()
         qp.begin(self)
+
         qp.setPen(Qt.black)
         qp.setBrush(Qt.black)
         qp.drawRect(self.leftTop().x(), self.leftTop().y(), self.real_width(), self.real_height())
         self.draw_net(qp)
+
         qp.setPen(self.func_pen)
         self.get_current_task()(qp, self.a, self.b, self.c)
+        qp.setPen(QColor(40, 40, 40))
+        qp.setBrush(QColor(40, 40, 40))
+        qp.drawRect(0, 0, self.panelWidth, self.real_height())
         qp.end()
 
     def draw_net(self, qp):
