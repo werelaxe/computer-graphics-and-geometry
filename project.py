@@ -1,3 +1,5 @@
+from time import sleep
+
 from PyQt5.QtCore import QLocale
 from PyQt5.QtCore import QTimer
 from PyQt5.QtCore import QTimerEvent
@@ -5,6 +7,7 @@ from PyQt5.QtGui import QColor
 from PyQt5.QtGui import QDoubleValidator
 from PyQt5.QtGui import QMouseEvent
 from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QVector3D
 from PyQt5.QtGui import QWheelEvent
 from PyQt5.QtWidgets import QComboBox
 from PyQt5.QtWidgets import QLabel
@@ -13,10 +16,10 @@ from PyQt5.QtWidgets import QWidget, QApplication
 from PyQt5.QtGui import QPainter, QPen
 from PyQt5.QtCore import Qt, QPoint, QPointF
 import numpy as np
-from math import cos, pi
+from math import cos, pi, sqrt, sin
 import sys
 
-from geom import Polygon
+from geom import Polygon, Solid
 
 WIDTH = 1000
 HEIGHT = 800
@@ -48,17 +51,24 @@ def second_func(phi, a, b, _):
     # return phi
 
 
+def fifth_func(x, y):
+    return x ** 2 - y ** 2
+
+
 class Example(QWidget):
     def __init__(self):
         super().__init__()
         self.setMouseTracking(True)
         self.axis_pen = QPen(Qt.green)
         self.func_pen = QPen(Qt.red)
+        self.slim_pen = QPen(Qt.red)
         self.axis_pen.setWidth(3)
         self.func_pen.setWidth(3)
+        self.slim_pen.setWidth(1)
         self.coords_pen = QPen(Qt.green)
         self.padding = 0
         self.panelWidth = 200
+        self.angle = 0
         self.tracking = False
         self.last_coords = QPoint(0, 0)
         self.initVars()
@@ -71,18 +81,21 @@ class Example(QWidget):
         self.a = 1
         self.b = 1
         self.c = 1
-        k = 5
-        self.t_left_top = QPointF(-k, -k)
-        self.t_right_bottom = QPointF(k, k)
+        coef = 5
+        self.k = 1
+        self.t_left_top = QPointF(-coef, -coef)
+        self.t_right_bottom = QPointF(coef, coef)
         self.steps_count = 500
         self.alpha = self.t_left_top.x()
         self.beta = self.t_right_bottom.x()
-        self.task_number = 1
+        self.task_number = 5
         self.TASKS = {
             0: self.draw_first_func,
             1: self.draw_second_func,
             2: self.draw_ellipse,
             3: self.draw_polygons_residual,
+            4: self.draw_5_task,
+            5: self.draw_6_task,
         }
 
     def initUI(self):
@@ -436,7 +449,7 @@ class Example(QWidget):
 
     def draw_polygons_residual(self, qp: QPainter, *params):
         p1 = Polygon([-4, -3, -2, -1, -4, 2, -2, 4, 1, 3, 4, 2, 3, -1, 1, -3])
-        p2 = Polygon([-2, -4, -3, 0, 0, 4, 2, 1, 3, -4])
+        p2 = Polygon([-2, -4, -3, 0, 0, 4, 2, 1, 1, -1, 3, -2])
         if self.a == 1:
             self.draw_polygon(qp, p1)
 
@@ -453,7 +466,99 @@ class Example(QWidget):
             for p in p1 - p2:
                 self.draw_polygon(qp, p)
 
+    def get_coords_from_3d(self, point: QVector3D, k):
+        return QPointF(point.x() - k * point.z() / 2, point.y() - k * point.z() / 2)
+
+    def draw_line_in_3d(self, qp, p1: QVector3D, p2: QVector3D, k):
+        p1_in_2d = self.get_real_coord(self.get_coords_from_3d(p1, k))
+        p2_in_2d = self.get_real_coord(self.get_coords_from_3d(p2, k))
+        qp.drawLine(p1_in_2d, p2_in_2d)
+
+    def draw_5_task(self, qp: QPainter, *params):
+        qp.setPen(self.slim_pen)
+        self.angle += 0.1
+        k = pi * sin(self.angle) / 2
+        for y in range(-32, 15):
+            y /= 10
+            left = -100
+            right = 100
+            start_z = fifth_func(left, y)
+            prev_point = QVector3D(left, y, start_z)
+            for x in range(left + 1, right):
+                x /= 10
+                z = fifth_func(x, y)
+                new_point = QVector3D(x, z, y)
+                self.draw_line_in_3d(qp, prev_point, new_point, k)
+                prev_point = new_point
+        self.update()
+
+    @staticmethod
+    def get_qt_vector_from_hgen_coords(point):
+        return QVector3D(*point.coords)
+
+    def draw_solid(self, qp: QPainter, solid, view_point=None):
+        edges = solid.edges.values() if view_point is None else solid.get_visible_edges(view_point)
+        for edge in edges:
+            # print(self.get_qt_vector_from_hgen_coords(edge[0]))
+            # print(self.get_qt_vector_from_hgen_coords(edge[1]))
+            qp.drawLine(
+                self.get_real_2d_coords_from_theoretical_3d_coords(QVector3D(self.get_qt_vector_from_hgen_coords(edge[0]))),
+                self.get_real_2d_coords_from_theoretical_3d_coords(QVector3D(self.get_qt_vector_from_hgen_coords(edge[1])))
+            )
+        # print("end\n\n\n")
+
+    def get_real_2d_coords_from_theoretical_3d_coords(self, point: QVector3D):
+        z = point.x()
+        y = point.y()
+        x = point.z()
+        x_2 = -(x - z) * sqrt(3) / 2
+        y_2 = -((x + z) / 2 - y)
+        return self.get_real_coord(QPointF(x_2, y_2))
+
+    @staticmethod
+    def gen_rot_matrix(alpha):
+        return np.array([
+            [cos(alpha), 0, sin(alpha), 0],
+            [0, 1, 0, 0],
+            [-sin(alpha), 0, cos(alpha), 0],
+            [0, 0, 0, 1]
+        ])
+
+    def rotate_solid(self, solid_matrix, alpha):
+        return self.gen_rot_matrix(alpha).dot(solid_matrix)
+
+    def draw_6_task(self, qp: QPainter, *params):
+        qp.setPen(self.func_pen)
+        view_point = np.array([1, 1, 1, 0])
+
+        # cube
+        cube_matrix = np.array([
+            [2, -2, 0, 0, -1, 1],
+            [0, 0, 2, -2, 0, 0],
+            [1, -1, 0, 0, 2, -2],
+            [6, -4, 2, 1, -2, 6],
+        ])
+        cube_matrix = self.rotate_solid(cube_matrix, self.angle)
+        cube = Solid(cube_matrix)
+        self.draw_solid(qp, cube, view_point)
+
+        # pyramid
+        pyramid_matrix = np.array([
+            [2, -2, 0, -1, 1],
+            [0, -4, 2, -2, -2],
+            [1, -1, 0, 2, -2],
+            [1, 1, 1, 5, -3],
+        ])
+        self.angle += 0.01
+        pyramid_matrix = self.rotate_solid(pyramid_matrix, self.angle)
+        pyramid = Solid(pyramid_matrix)
+        self.draw_solid(qp, pyramid, view_point)
+        self.update()
+
+
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = Example()
     sys.exit(app.exec_())
+
+# z = x ** 2 - y ** 2

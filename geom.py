@@ -1,6 +1,8 @@
+from collections import defaultdict
 from copy import copy
 from math import sqrt
-
+import numpy as np
+from numpy.linalg import solve, matrix_rank
 EPS = 0.00001
 
 
@@ -11,7 +13,7 @@ class PointsDict(dict):
                 return v
 
 
-class Point:
+class Point2D:
     def __init__(self, *args):
         if len(args) == 2:
             self.x, self.y = args
@@ -37,6 +39,32 @@ class Point:
         return sqrt((p.x - self.x) ** 2 + (p.y - self.y) ** 2)
 
 
+class Point3D:
+    def __init__(self, *args):
+        if len(args) == 3:
+            self.x, self.y, self.z = args
+        elif len(args) == 1:
+            self.x, self.y, self.z = args[0]
+        else:
+            raise ValueError
+
+    def __hash__(self):
+        return hash(self.x) ^ hash(self.y) ^ hash(self.z)
+
+    def __eq__(self, other):
+        return self.x == other.x and self.y == other.y and self.z == other.z
+
+    def __repr__(self):
+        return "Point({}, {}, {})".format(*self.coords)
+
+    @property
+    def coords(self):
+        return self.x, self.y, self.z
+
+    def dto(self, p):
+        return sqrt((p.x - self.x) ** 2 + (p.y - self.y) ** 2 + (p.z - self.z) ** 2)
+
+
 class Segment:
     def __init__(self, *args):
         self.ks = []
@@ -45,8 +73,8 @@ class Segment:
         if len(args) == 2:
             self.first, self.second = args
         elif len(args) == 4:
-            self.first = Point(*args[:2])
-            self.second = Point(*args[2:])
+            self.first = Point2D(*args[:2])
+            self.second = Point2D(*args[2:])
         else:
             raise ValueError
         self.a, self.b, self.c = self.get_ks()
@@ -79,7 +107,7 @@ class Segment:
             y = -self.a * x - self.c
         else:
             raise ValueError
-        suggested_point = Point(x, y)
+        suggested_point = Point2D(x, y)
         if suggested_point in self and suggested_point in other:
             return suggested_point
 
@@ -97,13 +125,13 @@ class Segment:
 class Polygon:
     def __init__(self, points):
         self.points = []
-        if type(points[0]) == Point:
+        if type(points[0]) == Point2D:
             self.points = points
         elif type(points[0]) == int:
             if len(points) % 2 == 1:
                 raise ValueError
             it = iter(points)
-            self.points = list(map(Point, zip(it, it)))
+            self.points = list(map(Point2D, zip(it, it)))
         else:
             raise ValueError
         self.segments = self.get_segments()
@@ -144,7 +172,7 @@ class Polygon:
         for seg in self.segments:
             if item in seg:
                 return True
-        inf = Point(1234567890, 999999999)
+        inf = Point2D(1234567890, 999999999)
         return len(list(filter(lambda x: x.intersects(Segment(item, inf)) is not None, self.segments))) % 2 == 1
 
     def find_segment_by_point(self, point):
@@ -200,3 +228,57 @@ class Polygon:
         while self._find_cycle(other, used, result):
             pass
         return list(map(Polygon, result))
+
+
+class Solid:
+    def __init__(self, matrix):
+        self.matrix = matrix
+        self.points = []
+        self.edges = {}
+        s = matrix.shape[1]
+        point_to_facets = defaultdict(set)
+        for i in range(s):
+            for j in range(i, s):
+                for k in range(j, s):
+                    point_m = np.array([matrix[:, i], matrix[:, j], matrix[:, k]])
+                    base_m = point_m[:, 0:3]
+                    free_c = -point_m[:, 3]
+                    if matrix_rank(base_m) == 3:
+                        point = Point3D(solve(base_m, free_c))
+                        if np.array(point.coords + (1,)) in self:
+                            self.points.append(point)
+                            point_to_facets[point] = point_to_facets[point].union(set(map(tuple, point_m)))
+        for i in range(len(self.points)):
+            for j in range(i + 1, len(self.points)):
+                if len(point_to_facets[self.points[i]].intersection(point_to_facets[self.points[j]])) >= 2:
+                    key = tuple(sorted(point_to_facets[self.points[i]].intersection(point_to_facets[self.points[j]])))
+                    self.edges[key] = self.points[i], self.points[j]
+        self.ptf = point_to_facets
+
+    def __contains__(self, point):
+        return all(x >= -EPS for x in point.dot(self.matrix))
+
+    def get_invisible_edges(self, view_point):
+        invisible_indexes = [i for i in range(self.matrix.shape[1]) if view_point.dot(self.matrix)[i] < 0]
+        for i in range(len(invisible_indexes)):
+            for j in range(i + 1, len(invisible_indexes)):
+                key = tuple(sorted(map(tuple, [self.matrix[:, invisible_indexes[i]], self.matrix[:, invisible_indexes[j]]])))
+                yield self.edges[key]
+
+    def get_visible_edges(self, view_point):
+        return list(set(self.edges.values()) - set(self.get_invisible_edges(-view_point)))
+
+
+def main():
+    m = np.array([
+        [2, -2, 0, -1, 1],
+        [0, -4, 2, -2, -2],
+        [1, -1, 0, 2, -2],
+        [1, 1, 1, 1, 1],
+    ])
+    s = Solid(m)
+    print(s.points)
+
+
+if __name__ == '__main__':
+    main()
